@@ -1,0 +1,268 @@
+(function(){
+var B=window.BEANS||[],app=document.getElementById('app'),st={a:{}},timer=null;
+var ACID={high:['좋아해요','밝고 상큼한 산미가 좋아요',[1,7]],mid:['은은한 정도','살짝 느껴지는 정도가 좋아요',[8,14]],low:['싫어해요','산미 없이 고소한 게 좋아요',[15,18]]};
+var CH={'과일':'🍑 상큼달콤한 과일 향','꽃':'🌼 화사한 꽃 향','초콜릿':'🍫 고소한 초콜릿·견과 향','any':'상관없어요'};
+var ROAST=['#B07A4F','#9B5E2B','#8A5326','#6E4019','#5A3214','#43281A','#2E1D14'];
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function byId(id){for(var i=0;i<B.length;i++)if(B[i].id===id)return B[i]}
+function band(r){return r<=7?'high':r<=14?'mid':'low'}
+function top(t,back){return '<div class="top"><button class="back" onclick="appBack(\''+(back||'#/')+'\')">← 뒤로</button><h1>'+esc(t)+'</h1></div>'}
+function tc(b){for(var g in CHO)if(CHO[g].indexOf(b.id)>=0)return g;return b.characters[0]}
+function imgOf(b){return b.thumb||b.image}
+function card(b,extra){return '<button class="bean" data-char="'+tc(b)+'" onclick="location.hash=\'#/bean/'+b.id+'\'"><img src="'+imgOf(b)+'" alt="" loading="lazy"><div>'+(extra&&extra.rank?'<span class="rank">'+extra.rank+'</span>':'')+'<b>'+esc(b.name)+'</b><span>'+esc(b.keywords.join(' · '))+'</span>'+(extra&&extra.why?'<span class="why">'+esc(extra.why)+'</span>':'')+'</div></button>'}
+function popts(b){var p=(b.purchase||[]).filter(function(o){return okurl(o.url)});if(!p.length&&okurl(b.purchaseUrl))p=[{weight:'구매',url:b.purchaseUrl}];return p}
+function okurl(u){return /^https?:\/\//.test(u||'')}
+function buy(b,cls){return popts(b).length?'<button type="button" class="buy '+(cls||'')+'" data-buy="'+b.id+'">구매하기</button>':'<span class="buy off '+(cls||'')+'" aria-disabled="true">구매 링크 준비 중</span>'}
+function closeSheet(){var s=document.getElementById('sheet');if(s)s.remove();document.removeEventListener('keydown',escK)}
+function escK(e){if(e.key==='Escape')closeSheet()}
+function openSheet(b){closeSheet();var d=document.createElement('div');d.id='sheet';d.className='sheetwrap';d.setAttribute('data-char',tc(b));
+ var h='<div class="sheet" role="dialog" aria-modal="true" aria-label="중량 선택"><div class="grab"></div><button class="sx" aria-label="닫기">✕</button><div class="stitle">중량을 선택해 주세요</div><div class="sname">'+esc(b.name)+'</div>';
+ popts(b).forEach(function(o){h+=okurl(o.url)?'<a class="wopt" href="'+esc(o.url)+'" target="_blank" rel="noopener"><b>'+esc(o.weight)+'</b><span>구매 페이지 →</span></a>':'<span class="wopt off" aria-disabled="true"><b>'+esc(o.weight)+'</b><span>링크 준비 중</span></span>'});
+ d.innerHTML=h+'</div>';document.body.appendChild(d);
+ d.onclick=function(e){if(e.target===d||e.target.closest('.sx'))closeSheet()};document.addEventListener('keydown',escK);d.querySelector('.sx').focus()}
+document.addEventListener('click',function(e){var t=e.target.closest&&e.target.closest('[data-buy]');if(t){e.preventDefault();e.stopPropagation();openSheet(byId(t.getAttribute('data-buy')))}},true);
+function stopTimer(){if(timer){clearInterval(timer.h);timer=null}}
+function isStandalone(){return (window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)||window.navigator.standalone===true}
+function isIOS(){var ua=navigator.userAgent||'';return /iPhone|iPad|iPod/.test(ua)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1)}
+function isAndroid(){return /Android/i.test(navigator.userAgent||'')}
+function isInAppBrowser(){return /KAKAOTALK|NAVER|Instagram|FBAN|FBAV|FB_IAB|Line\/|DaumApps|DaumDevice/i.test(navigator.userAgent||'')}
+var deferredPrompt=null;
+function hideInstallBtn(){var w=document.getElementById('installWrap');if(w)w.hidden=true}
+function appUrl(){return location.origin+location.pathname}
+function openInstallGuide(kind){
+  closeSheet();
+  var title,body;
+  if(kind==='inapp'){
+    title='이 브라우저에서는 바로 추가할 수 없어요';
+    body='<p class="install-p">카카오톡·네이버 같은 앱 속 브라우저에서는 홈 화면 추가가 막혀 있어요.</p>'+
+      '<ol class="install-ol"><li>아래 버튼으로 주소를 복사해 주세요</li><li>'+(isIOS()?'사파리':'크롬 또는 삼성 인터넷')+'에서 주소를 열어 주세요</li><li>열린 페이지에서 “홈 화면에 추가”를 선택해 주세요</li></ol>'+
+      '<button type="button" class="btn2" id="installCopy">주소 복사</button>';
+  }else if(kind==='ios'){
+    title='홈 화면에 추가';
+    body='<p class="install-p">아이폰·아이패드에서는 아래 두 단계로 추가할 수 있어요.</p>'+
+      '<ol class="install-ol"><li>화면 아래 공유 버튼(□↑)을 눌러 주세요</li><li>“홈 화면에 추가”를 선택해 주세요</li></ol>';
+  }else if(kind==='android'){
+    title='홈 화면에 추가';
+    body='<div class="install-sec">'+
+      '<div class="install-sh">앱으로 설치하기</div>'+
+      '<p class="install-p">설치 중에 ‘보안 검사’나 ‘앱 검사’ 창이 뜰 수 있어요. 웹 앱을 설치할 때 나오는 정상적인 안내이니, 안심하고 설치하시면 됩니다.</p>'+
+      (deferredPrompt?'<button type="button" class="buy install-go" id="installPrompt">앱 설치하기</button>':'<p class="install-hint">브라우저 더보기 메뉴(⋮)에서 “앱 설치”를 선택해 주세요.</p>')+
+      '</div>'+
+      '<div class="install-sec install-sec-alt">'+
+      '<div class="install-sh">무설치로 홈 화면에 추가</div>'+
+      '<p class="install-p">앱으로 설치하지 않고, 바로가기만 홈 화면에 넣을 수 있어요.</p>'+
+      '<ol class="install-ol"><li>브라우저 더보기 메뉴(⋮)를 눌러 주세요.</li><li>‘현재 페이지 추가’ 선택 후 ‘홈 화면에 추가’를 선택해 주세요.</li></ol>'+
+      '</div>';
+  }else{
+    title='홈 화면에 추가';
+    body='<p class="install-p">브라우저 메뉴에서 추가할 수 있어요.</p>'+
+      '<ol class="install-ol"><li>브라우저 더보기 메뉴(⋮)를 눌러 주세요.</li><li>“홈 화면에 추가” 또는 “앱 설치”를 선택해 주세요.</li></ol>';
+  }
+  var d=document.createElement('div');d.id='sheet';d.className='sheetwrap';
+  d.innerHTML='<div class="sheet'+(kind==='android'?' install-sheet':'')+'" role="dialog" aria-modal="true" aria-labelledby="installTitle"><div class="grab"></div><button type="button" class="sx" aria-label="닫기">✕</button><div class="stitle" id="installTitle">'+title+'</div>'+body+'</div>';
+  document.body.appendChild(d);
+  d.onclick=function(e){if(e.target===d||e.target.closest('.sx'))closeSheet()};
+  document.addEventListener('keydown',escK);
+  var sx=d.querySelector('.sx');if(sx)sx.focus();
+  var c=document.getElementById('installCopy');
+  if(c)c.onclick=function(){
+    var url=appUrl(),btn=c,prev=btn.textContent;
+    function ok(){btn.textContent='복사했어요';setTimeout(function(){if(btn.textContent==='복사했어요')btn.textContent=prev},1600)}
+    function fallback(){var i=document.createElement('input');i.value=url;i.setAttribute('readonly','');i.style.position='fixed';i.style.left='-9999px';document.body.appendChild(i);i.select();try{if(document.execCommand('copy'))ok()}catch(e){}document.body.removeChild(i)}
+    if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(url).then(ok).catch(fallback);
+    else fallback();
+  };
+  var ip=document.getElementById('installPrompt');
+  if(ip)ip.onclick=function(){
+    if(!deferredPrompt)return;
+    var ev=deferredPrompt;deferredPrompt=null;
+    closeSheet();
+    ev.prompt();
+    ev.userChoice.then(function(ch){if(ch&&ch.outcome==='accepted')hideInstallBtn()});
+  };
+}
+function onInstallClick(){
+  if(isInAppBrowser())openInstallGuide('inapp');
+  else if(isIOS())openInstallGuide('ios');
+  else if(isAndroid()||deferredPrompt)openInstallGuide('android');
+  else openInstallGuide('other');
+}
+function home(){app.innerHTML='<div class="brand"><h1>커스텀커피 원두 가이드</h1><p>나에게 맞는 원두와 레시피를 찾아보세요</p></div><div class="pad">'+
+'<button class="bigbtn primary" onclick="location.hash=\'#/quiz/1\'">내 취향 원두 찾기</button>'+
+'<button class="bigbtn" onclick="location.hash=\'#/recipes\'">원두별 레시피<small>핸드드립 · 에스프레소</small></button>'+
+'<button class="bigbtn" onclick="location.hash=\'#/know-how\'">커피 노하우<small>보관 · 분쇄도</small></button>'+
+'<button class="bigbtn" onclick="location.hash=\'#/list\'">전체 원두 보기</button>'+
+(isStandalone()?'':'<div class="install-wrap" id="installWrap"><button type="button" class="install-btn" id="installBtn">홈 화면에 추가</button></div>')+
+'</div>';
+ var b=document.getElementById('installBtn');if(b)b.onclick=onInstallClick}
+function prog(n){var s='<div class="progress">';for(var i=1;i<=2;i++)s+='<i class="'+(i<=n?'on':'')+'"></i>';return s+'</div><div class="muted">질문 '+n+' / 2</div>'}
+function opt(k,v,b,s,num){return '<button class="opt'+(st.a[k]==v?' sel':'')+'" data-k="'+k+'" data-v="'+v+'">'+(num?'<span class="num">'+num+'</span>':'')+'<div><b>'+esc(b)+'</b>'+(s?'<span>'+esc(s)+'</span>':'')+'</div></button>'}
+// 산미 '싫어해요' 분기: 고정 추천 (여기서 수정)
+var LOWMAP={strong:{label:'진한 맛',beans:[['blackcity','산미가 적고 다크 초코의 쌉싸름함과 카라멜의 단맛, 은은한 스모키 향을 좋아하시는 분께']]},
+ soft:{label:'부드러운 맛',beans:[['gloria','흑설탕·다크초코의 단맛과 고급스런 훈연 향, 약한 신맛의 호불호 없는 올라운더를 찾는 분께'],['caramelado','약한 신맛에 땅콩 카라멜·초코 쿠키의 달콤 고소함을 부드럽게 즐기고 싶은 분께'],['brownmellow','신맛·쓴맛이 적고 매끄러운 바디감과 달콤 고소한 코코아 향을 원하시는 분께']]}};
+// 산미 '좋아해요' 분기: 과일/꽃만, 고정 순위
+var HIGHMAP={'과일':{label:'과일향',beans:[['muntasha','밝고 상큼한 산미와 복숭아·살구의 달콤한 과일 향을 좋아하시는 분께'],['elrose','화려한 과일 향과 와인처럼 풍부한 산미를 즐기고 싶은 분께'],['stella','베리류의 상큼함과 꽃 향이 어우러진 내추럴 산미를 원하시는 분께'],['redcello','복숭아처럼 달콤상큼한 과일 캐릭터의 블렌드를 찾는 분께']]},
+ '꽃':{label:'꽃향',beans:[['sylvia','밝은 산미와 화사한 꽃 향, 자몽·자두의 상큼함을 좋아하시는 분께'],['cellena','자스민 꽃과 샤인 머스캣처럼 우아한 꽃·과일 향을 원하시는 분께'],['cindy','섬세한 꽃 향과 시트러스 산미의 클래식 게이샤를 찾는 분께']]}};
+// 산미 '은은한 정도' 분기: 산미/고소함 밸런스 선택
+var MIDMAP={acid2nutty1:{label:'산미 2단계 + 고소함 1단계',beans:[['violet','은은한 산미를 조금 더 느끼며 클린하고 화사한 컵을 원하시는 분께'],['eldorado','청사과·화이트 와인처럼 산뜻하면서도 부담 없는 산미를 좋아하시는 분께'],['cindy','은은한 산미 위에 섬세한 꽃 향을 더하고 싶은 분께']]},
+ acid1nutty2:{label:'산미 1단계 + 고소함 2단계',beans:[['vincent','은은한 산미와 군고구마·다크초콜릿의 고소함을 함께 즐기고 싶은 분께'],['sweetyyellow','아카시아 꿀·군고구마의 달콤 고소함에 산미는 살짝만 원하는 분께']]}};
+function quiz(n){var h=top('취향 찾기')+'<div class="pad">'+prog(n);
+ if(n==1){h+='<p class="q">커피의 산미(신맛)는<br>어떠세요?</p><p class="qsub">새콤한 맛에 대한 취향이에요</p>';for(var k in ACID)h+=opt('acid',k,ACID[k][0],ACID[k][1])}
+ if(n==2&&st.a.acid=='low'){h+='<p class="q">진한 맛이 좋으세요,<br>부드러운 맛이 좋으세요?</p><p class="qsub">산미가 적은 커피 중에서 골라드릴게요</p>'+opt('body','strong','진한 맛','다크 초콜릿·훈연 향의 묵직한 맛')+opt('body','soft','부드러운 맛','카라멜·코코아의 달콤 고소한 맛')}
+ else if(n==2&&st.a.acid=='mid'){h+='<p class="q">어떤 밸런스가<br>좋으세요?</p><p class="qsub">은은한 산미 안에서 산미와 고소함의 비중을 골라주세요</p>'+opt('mid','acid2nutty1','산미 2단계 + 고소함 1단계','산미를 조금 더, 고소함은 살짝')+opt('mid','acid1nutty2','산미 1단계 + 고소함 2단계','고소함을 조금 더, 산미는 살짝')}
+ else if(n==2&&st.a.acid=='high'){h+='<p class="q">어떤 향이 좋으세요?</p><p class="qsub">커피의 전체적인 캐릭터예요</p>'+opt('ch','과일','과일향',CH['과일'])+opt('ch','꽃','꽃향',CH['꽃'])}
+ else if(n==2){h+='<p class="q">어떤 향이 좋으세요?</p><p class="qsub">커피의 전체적인 캐릭터예요</p>';for(var c in CH)h+=opt('ch',c,c=='any'?'상관없어요':c,c=='any'?'모두 좋아요':CH[c])}
+ app.innerHTML=h+'</div>';
+ app.querySelectorAll('.opt').forEach(function(el){el.onclick=function(){var k=el.dataset.k,v=el.dataset.v;st.a[k]=v;if(k=='acid'){delete st.a.ch;delete st.a.body;delete st.a.mid}location.hash=n<2?'#/quiz/'+(n+1):'#/result'}})}
+function recommend(a){var c=ACID[a.acid]?(ACID[a.acid][2][0]+ACID[a.acid][2][1])/2:10.5;
+ return B.map(function(b){var s=0,why=[];
+  if(a.acid&&band(b.acidityRank)==a.acid){s+=2;why.push('산미 '+ACID[a.acid][0].replace('해요','하는 분께').replace('은은한 정도','은은하게'))}
+  if(a.ch&&a.ch!='any'&&b.characters.indexOf(a.ch)>=0){s+=2;why.push(a.ch+' 캐릭터')}
+  return {b:b,s:s,d:Math.abs(b.acidityRank-c),why:why}}).sort(function(x,y){return y.s-x.s||x.d-y.d}).slice(0,3)}
+function fixedResult(sub,beans){var hh=top('추천 결과')+'<div class="pad"><p class="q">당신을 위한 원두 '+beans.length+'가지</p><p class="qsub">'+esc(sub)+'</p>';
+ beans.forEach(function(x,i){var b=byId(x[0]);hh+='<div class="rcard" data-char="'+tc(b)+'">'+card(b,{rank:(i+1)+'순위',why:'추천 이유: '+x[1]})+'</div>'});
+ app.innerHTML=hh+'<button class="btn2" onclick="location.hash=\'#/quiz/1\'">처음부터 다시</button><button class="btn2" onclick="location.hash=\'#/list\'">전체 원두 보기</button></div>'}
+function result(){if(st.a.acid=='low'&&LOWMAP[st.a.body]){var L=LOWMAP[st.a.body];fixedResult('산미 싫어해요 · '+L.label,L.beans);return}
+ if(st.a.acid=='high'&&HIGHMAP[st.a.ch]){var H=HIGHMAP[st.a.ch];fixedResult('산미 좋아해요 · '+H.label,H.beans);return}
+ if(st.a.acid=='mid'&&MIDMAP[st.a.mid]){var M=MIDMAP[st.a.mid];fixedResult('산미 은은한 정도 · '+M.label,M.beans);return}
+ if(!st.a.acid||!st.a.ch){location.hash='#/quiz/1';return}var r=recommend(st.a);
+ var h=top('추천 결과')+'<div class="pad"><p class="q">당신을 위한 원두 '+r.length+'가지</p><p class="qsub">'+'산미 '+esc(ACID[st.a.acid][0])+' · '+esc(st.a.ch=='any'?'향 상관없음':st.a.ch)+'</p>';
+ r.forEach(function(x,i){h+='<div class="rcard" data-char="'+tc(x.b)+'">'+card(x.b,{rank:(i+1)+'순위',why:'추천 이유: '+(x.why.length?x.why.join(' · ')+'에 맞아요':'선택하신 산미 취향과 가장 가까워요')})+'</div>';});
+ app.innerHTML=h+'<button class="btn2" onclick="location.hash=\'#/quiz/1\'">처음부터 다시</button><button class="btn2" onclick="location.hash=\'#/list\'">전체 원두 보기</button></div>'}
+function normq(s){return String(s||'').toLowerCase().replace(/\s+/g,'')}
+function hay(b){var p=[b.name,b.nameEn,b.origin,b.description].concat(b.keywords||[]).concat(b.characters||[]);
+ (b.greenBean||[]).forEach(function(g){for(var k in g)p.push(g[k])});return normq(p.join(' '))}
+function matches(b,q){q=normq(q);return !q||hay(b).indexOf(q)>=0}
+function searchBox(id,q){return '<div class="bsearch"><input id="'+id+'" type="search" placeholder="원두 이름으로 검색" value="'+esc(q||'')+'" autocomplete="off" enterkeyhint="search" aria-label="원두 이름으로 검색"><button type="button" class="bsearch-x" id="'+id+'x" aria-label="검색어 지우기"'+(q?'':' hidden')+'>×</button></div>'}
+function bindSearch(id,fn){var el=document.getElementById(id),x=document.getElementById(id+'x');if(!el)return;
+ el.addEventListener('input',function(){if(x)x.hidden=!el.value;fn(el.value)});
+ if(x)x.onclick=function(){el.value='';x.hidden=true;fn('');el.focus()}}
+function emptySearch(){return '<div class="bempty">검색 결과가 없어요</div>'}
+function listBody(f,q){var bs=B.filter(function(b){return (!f||f=='전체'||b.characters.indexOf(f)>=0)&&matches(b,q)}).sort(function(x,y){return x.acidityRank-y.acidityRank});
+ if(!bs.length)return emptySearch();
+ var h='<div class="sec">산미 순서로 보기 <span class="muted" style="font-weight:600">('+bs.length+'개)</span></div><div class="adir"><span>← 신맛 강함</span><span>신맛 약함 →</span></div><div class="agrad"><i id="apos"></i></div>';
+ h+='<div class="slider" id="sl">';bs.forEach(function(b){h+='<button class="scard" data-char="'+tc(b)+'" onclick="location.hash=\'#/bean/'+b.id+'\'"><span class="srank">산미 '+b.acidityRank+'위</span><img src="'+imgOf(b)+'" alt="" loading="lazy"><b>'+esc(b.name)+'</b><span class="skw">'+esc(b.keywords.slice(0,2).join(' · '))+'</span><span class="schar">'+esc(b.characters.join(' · '))+'</span></button>'});
+ return h+'</div><p class="muted" style="text-align:center;margin-top:6px">옆으로 밀어서 더 보기</p>'}
+function bindSlider(){var sl=document.getElementById('sl'),ap=document.getElementById('apos');if(!sl||!ap)return;function up(){var m=sl.scrollWidth-sl.clientWidth;var w=Math.max(8,sl.clientWidth/sl.scrollWidth*100);ap.style.width=w+'%';ap.style.left=(m>0?sl.scrollLeft/m*(100-w):0)+'%'}sl.addEventListener('scroll',up,{passive:true});up()}
+function list(f){var q=st.listQ||'';var h=top('전체 원두')+'<div class="pad"><div class="chips">';
+ ['전체','과일','꽃','초콜릿'].forEach(function(c){h+='<button class="chip'+((f||'전체')==c?' on':'')+'" data-c="'+c+'">'+c+'</button>'});h+='</div>';
+ h+=searchBox('bq',q)+'<div id="blist">'+listBody(f,q)+'</div></div>';app.innerHTML=h;
+ app.querySelectorAll('.chip').forEach(function(el){el.onclick=function(){st.filter=el.dataset.c;list(st.filter)}});
+ bindSearch('bq',function(v){st.listQ=v;document.getElementById('blist').innerHTML=listBody(f,v);bindSlider()});bindSlider()}
+function bars(v,max){var s='<div class="bar">';for(var i=1;i<=max;i++)s+='<i class="'+(v!=null&&i<=v?'on':'')+'"></i>';return s+'</div><em>'+(v==null?'-':v+'/'+max)+'</em>'}
+function info(b){var h=agingCard(b)+'<div class="card"><div class="sec" style="margin-top:0">로스팅 레벨</div><div class="roast">';
+ for(var i=1;i<=7;i++)h+='<i class="'+(i==b.roast.position?'on':'')+'" style="background:'+ROAST[i-1]+'"></i>';
+ h+='</div><div class="roastlbl"><span>약</span><span>중</span><span>강</span></div>'+(b.roast.time?'<div class="muted" style="margin-top:6px">TIME '+esc(b.roast.time)+'</div>':'')+'</div>';
+ h+='<div class="card"><div class="sec" style="margin-top:0">맛 밸런스</div>';for(var k in b.meters)h+='<div class="meter"><label>'+k+'</label>'+bars(b.meters[k],5)+'</div>';
+ h+='</div><div class="card"><div class="sec" style="margin-top:0">메뉴 추천도</div>';for(var m in b.menus)h+='<div class="meter menu"><label style="width:150px">'+m+'</label>'+bars(b.menus[m],5)+'</div>';
+ h+='</div><div class="card"><div class="sec" style="margin-top:0">생두 특징</div>';
+ var gb=b.greenBean||[];gb.forEach(function(g){h+='<div class="gb">'+(gb.length>1||b.group=='blend'?'<div class="gbh">'+esc(g['국가'])+'</div>':'');
+  ['재배지','생산자','원두','가공법','품종','고도'].forEach(function(f){if(g[f])h+='<div class="gbr"><span>'+f+'</span><b>'+esc(g[f])+'</b></div>'});h+='</div>'});
+ h+='</div>';return h}
+function fmt(t){return String(Math.floor(t/60)).padStart(2,'0')+':'+String(t%60).padStart(2,'0')}
+function agingCard(b){var a=b&&b.aging;if(!a)return '';return '<div class="card aging"><div class="sec" style="margin-top:0"><span class="sn">☕</span> 숙성 안내</div><p class="desc" style="margin:0">'+esc(a.text||'')+(a.groundNote?' <span class="muted">*'+esc(a.groundNote)+'</span>':'')+'</p>'+(a.storage?'<p class="desc" style="margin:6px 0 0">'+esc(a.storage)+'</p>':'')+'</div>'}
+function recipe(b,ri){var R=b.recipes||[];if(!R.length)return agingCard(b)+'<div class="card empty"><div class="ico">☕️</div><b>레시피 준비 중</b><p>곧 이 원두에 맞는 추출 레시피를 알려드릴게요.</p></div>';
+ ri=Math.min(ri||0,R.length-1);var r=R[ri],h=agingCard(b)+'<div class="chips">';R.forEach(function(x,i){var lab=(x.method=='handdrip'||/^핸드드립/.test(x.title||''))?'핸드드립':x.title;h+='<button class="chip'+(i==ri?' on':'')+'" data-r="'+i+'">'+esc(lab)+'</button>'});
+ h+='</div><div class="card">'+(r.sample?'<div class="sample">※ 샘플 레시피입니다 (화면 시연용, 추후 정식 데이터로 교체 예정)</div>':'')+'<b style="font-size:19px">'+esc(r.title)+'</b> <span class="muted">'+esc(r.subtitle||'')+'</span><div class="kv" style="margin-top:12px">';
+ (r.items||[]).forEach(function(it){h+='<div><small>'+esc(it.label)+'</small><b>'+esc(it.value==null?'-':it.value)+'</b></div>'});h+='</div>';
+ if(r.steps&&r.steps.length){h+='<ol class="steps">';r.steps.forEach(function(s,i){h+='<li data-t="'+s.time+'"><span class="t">'+fmt(s.time)+'</span><span>'+(s.label?'<b>('+esc(s.label)+')</b> ':'')+esc(s.text)+'</span></li>'});
+  h+='</ol><div class="timer"><div class="clock" id="clk">00:00</div><button class="go" id="tgo">시작</button><button id="trs">리셋</button></div>'}
+ if(r.tip)h+='<p class="desc tip" style="margin-top:14px">⏱ '+esc(r.tip)+'</p>';
+ if(r.note)h+='<p class="desc" style="margin-top:10px">💡 '+esc(r.note)+'</p>';return h+'</div>'}
+function bindRecipe(b){app.querySelectorAll('[data-r]').forEach(function(el){el.onclick=function(){stopTimer();st.ri=+el.dataset.r;(st.reRecipe||function(){detail(b.id,'recipe')})()}});
+ var go=document.getElementById('tgo');if(!go)return;var t=0,run=false,clk=document.getElementById('clk'),lis=app.querySelectorAll('.steps li');
+ function paint(){clk.textContent=fmt(t);var cur=-1;lis.forEach(function(li,i){if(t>=+li.dataset.t)cur=i});lis.forEach(function(li,i){li.className=(run||t>0)?(i==cur?'cur':i<cur?'done':''):''})}
+ go.onclick=function(){if(run){stopTimer();run=false;go.textContent='계속'}else{run=true;go.textContent='일시정지';timer={h:setInterval(function(){t++;paint()},1000)}}paint()};
+ document.getElementById('trs').onclick=function(){stopTimer();run=false;t=0;go.textContent='시작';paint()}}
+var CHO={'과일':['belleza','rebecca','elrose','muntasha','stella','redcello','vincent'],'꽃':['sylvia','cindy','cellena','rosellin','violet','eldorado'],'초콜릿':['sweetyyellow','gloria','caramelado','brownmellow','blackcity']};
+var CHC={'과일':'#E3A396','꽃':'#E6CF7A','초콜릿':'#A88470'};
+function pos(b){if(!b.posImage)return '<div class="card empty"><b>특징 포지션 준비 중</b></div>';return '<div class="card posimg"><img src="'+b.posImage+'" alt="'+esc(b.name)+' 원두 특징 포지션" loading="lazy"></div>'}
+function detail(id,tab){var b=byId(id);if(!b){home();return}tab=tab||'info';
+ var h=top(b.name)+'<div class="hero"><img src="'+b.image+'" alt="'+esc(b.name)+' 패키지"></div><div class="pad" style="padding-top:4px"><div class="dname">'+esc(b.name)+'</div><div class="den">'+esc(b.nameEn)+'</div><div class="tags">';
+ b.keywords.forEach(function(k){h+='<span class="tag">'+esc(k)+'</span>'});h+='</div><p class="desc">'+esc(b.description)+'</p>';
+ h+='<div class="tabs"><button data-tab="info" class="'+(tab=='info'?'on':'')+'">정보</button><button data-tab="pos" class="'+(tab=='pos'?'on':'')+'">특징 포지션</button><button data-tab="recipe" class="'+(tab=='recipe'?'on':'')+'">레시피</button></div>';
+ h+=tab=='info'?info(b):tab=='pos'?pos(b):recipe(b,st.ri);app.innerHTML=h+'</div><div class="buybar">'+buy(b)+'</div>';app.classList.add('hasbar');app.setAttribute('data-char',tc(b));
+ if(tab=='pos'){var tb=app.querySelector('.tabs');setTimeout(function(){window.scrollTo(0,tb.getBoundingClientRect().top+window.scrollY-64)},0)}
+  app.querySelectorAll('[data-tab]').forEach(function(el){el.onclick=function(){stopTimer();history.replaceState(null,'','#/bean/'+id+(el.dataset.tab!='info'?'/'+el.dataset.tab:''));route()}});
+ if(tab=='recipe')bindRecipe(b)}
+var RICON={"light": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 48 48\" width=\"34\" height=\"34\" aria-hidden=\"true\"><g transform=\"rotate(-30 24 24)\"><ellipse cx=\"24\" cy=\"24\" rx=\"13\" ry=\"18\" fill=\"#C9A27A\" stroke=\"#A9825C\" stroke-width=\"1.5\"/><path d=\"M24 7.5 C 18 15, 30 21, 24 28 S 20 37, 24 40.5\" fill=\"none\" stroke=\"#7A5638\" stroke-width=\"2.6\" stroke-linecap=\"round\"/><ellipse cx=\"19\" cy=\"15\" rx=\"3\" ry=\"5\" fill=\"#FFFFFF\" opacity=\".35\"/></g></svg>", "medium": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 48 48\" width=\"34\" height=\"34\" aria-hidden=\"true\"><g transform=\"rotate(-30 24 24)\"><ellipse cx=\"24\" cy=\"24\" rx=\"13\" ry=\"18\" fill=\"#8A5A3C\" stroke=\"#6E452C\" stroke-width=\"1.5\"/><path d=\"M24 7.5 C 18 15, 30 21, 24 28 S 20 37, 24 40.5\" fill=\"none\" stroke=\"#3E2A1E\" stroke-width=\"2.6\" stroke-linecap=\"round\"/><ellipse cx=\"19\" cy=\"15\" rx=\"3\" ry=\"5\" fill=\"#FFFFFF\" opacity=\".22\"/></g></svg>", "dark": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 48 48\" width=\"34\" height=\"34\" aria-hidden=\"true\"><g transform=\"rotate(-30 24 24)\"><ellipse cx=\"24\" cy=\"24\" rx=\"13\" ry=\"18\" fill=\"#3E2A20\" stroke=\"#2A1C15\" stroke-width=\"1.5\"/><path d=\"M24 7.5 C 18 15, 30 21, 24 28 S 20 37, 24 40.5\" fill=\"none\" stroke=\"#A07E66\" stroke-width=\"2.6\" stroke-linecap=\"round\"/><ellipse cx=\"19\" cy=\"15\" rx=\"3\" ry=\"5\" fill=\"#FFFFFF\" opacity=\".14\"/></g></svg>"};
+var MICON={"handdrip": "data:image/png;base64,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", "espresso": "data:image/png;base64,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"};
+var MNAME={handdrip:'핸드드립 레시피',espresso:'에스프레소 레시피'};
+function roastLabel(p){return p==null?null:p<=2?'약배전':p<=4?'중배전':p==5?'중강배전':'강배전'}
+function procLabel(b){var ps=(b.greenBean||[]).map(function(g){return g['가공법']});if(!ps.length||ps.some(function(x){return !x}))return null;
+ var u=ps.filter(function(x,i){return ps.indexOf(x)==i});u.sort();return u.length==1?u[0]:u.join(' + ')+' 블렌드'}
+function recipesHome(){app.innerHTML=top('원두별 레시피')+'<div class="pad"><p class="q">어떤 방식으로 내리시나요?</p><p class="qsub">추출 방식을 골라주세요</p>'+
+ '<button class="opt" onclick="location.hash=\'#/recipes/handdrip\'"><span class="num micon"><img src="'+MICON.handdrip+'" alt=""></span><div><b>핸드드립 레시피</b><span>V60 등 드리퍼로 내리기</span></div></button>'+
+ '<button class="opt" onclick="location.hash=\'#/recipes/espresso\'"><span class="num micon"><img src="'+MICON.espresso+'" alt=""></span><div><b>에스프레소 레시피</b><span>에스프레소 · 아메리카노</span></div></button></div>'}
+function rcount(b,m){return (b.recipes||[]).filter(function(r){return r.method==m}).length}
+function rcard(b,m){var n=rcount(b,m);return '<button class="bean" data-char="'+tc(b)+'" onclick="location.hash=\'#/recipe/'+b.id+'/'+m+'\'"><img src="'+imgOf(b)+'" alt="" loading="lazy"><div><b>'+esc(b.name)+'</b><span>'+esc(b.keywords.join(' · '))+'</span><span class="why">'+(n?'레시피 '+n+'개'+((b.recipes||[]).some(function(r){return r.method==m&&r.sample})?' (샘플)':''):'레시피 준비 중')+'</span></div></button>'}
+function recipeBeans(m,q){var bs=B.slice().sort(function(x,y){return x.acidityRank-y.acidityRank}).filter(function(b){return matches(b,q)});return bs.length?bs.map(function(b){return rcard(b,m)}).join(''):emptySearch()}
+function recipesList(m,tab){if(!MNAME[m]){recipesHome();return}tab=tab||'bean';
+ var h=top(MNAME[m])+'<div class="pad"><div class="tabs" style="margin-top:0"><button class="'+(tab=='bean'?'on':'')+'" onclick="location.replace(\'#/recipes/'+m+'/bean\')">원두별 탐색</button><button class="'+(tab=='feature'?'on':'')+'" onclick="location.replace(\'#/recipes/'+m+'/feature\')">특징별 탐색</button></div>';
+ if(tab=='bean'){var q=st.recQ||'';h+=searchBox('rq',q)+'<p class="muted">원두를 누르면 '+MNAME[m]+'를 볼 수 있어요</p><div id="blist">'+recipeBeans(m,q)+'</div>'}
+ else{var C=window.CATRECIPES||{};h+='<p class="muted">가지고 계신 원두의 배전도와 가공법을 골라주세요</p>';
+  Object.keys(C).forEach(function(key){var c=C[key],n=(c[m]||[]).length;h+='<button class="opt catopt" onclick="location.hash=\'#/catrecipe/'+key+'/'+m+'\'"><span class="num roastic">'+RICON[key.split('-')[0]]+'</span><div><b>'+esc(c.name)+'</b><span>'+(n?'레시피 '+n+'개':'레시피 준비 중')+'</span></div></button>'})}
+ app.innerHTML=h+'</div>';if(tab=='bean')bindSearch('rq',function(v){st.recQ=v;document.getElementById('blist').innerHTML=recipeBeans(m,v)})}
+function recipeView(id,m){var b=byId(id);if(!b||!MNAME[m]){home();return}var v={};for(var k in b)v[k]=b[k];v.recipes=(b.recipes||[]).filter(function(r){return r.method==m});
+ app.innerHTML=top(MNAME[m])+'<div class="pad" data-char="'+tc(b)+'"><button class="bean" data-char="'+tc(b)+'" onclick="location.hash=\'#/bean/'+b.id+'\'"><img src="'+imgOf(b)+'" alt=""><div><b>'+esc(b.name)+'</b><span>원두 상세 보기 →</span></div></button>'+recipe(v,st.ri)+'</div>';
+ st.reRecipe=function(){recipeView(id,m)};bindRecipe(v)}
+function catRecipeView(key,m){var c=(window.CATRECIPES||{})[key];if(!c||!MNAME[m]){location.hash='#/recipes';return}
+ var v={id:'cat-'+key,name:c.name,aging:c.aging,recipes:(c[m]||[]).map(function(r){var x={};for(var k in r)x[k]=r[k];x.method=m;return x})};
+ app.innerHTML=top(MNAME[m])+'<div class="pad"><p class="q">'+esc(c.name)+'</p><p class="qsub">'+esc(c.name)+' 원두를 위한 '+MNAME[m]+(c.type?' · '+esc(c.type)+'타입 레시피':'')+'</p>'+recipe(v,st.ri)+'</div>';
+ st.reRecipe=function(){catRecipeView(key,m)};bindRecipe(v)}
+function khAged(it){var h='';
+ if(it.hero){h+='<div class="kh-hl aged-hero"><p class="kh-hlt">'+esc(it.hero.title)+'</p>';
+  if(it.hero.sub)h+='<p class="kh-hls">'+khEm(it.hero.sub,it.hero.em)+'</p>';h+='</div>'}
+ if(it.benefits&&it.benefits.length){h+='<section class="kh-panel kh-panel-1"><h2 class="kh-secq"><span>'+esc(it.benefitsTitle||'')+'</span></h2><ul class="aged-plus">';
+  it.benefits.forEach(function(t,i){h+='<li><span class="idx">'+('0'+(i+1)).slice(-2)+'</span><div class="t">'+esc(t).split('\n').join('<br>')+'</div></li>'});h+='</ul></section>'}
+ if(it.process&&it.process.length){h+='<section class="kh-panel kh-panel-2"><h2 class="kh-secq"><span>'+esc(it.processTitle||'')+'</span></h2><ol class="aged-steps">';
+  it.process.forEach(function(t,i){h+='<li><span class="num" aria-hidden="true">'+(i+1)+'</span><div class="t">'+esc(t).split('\n').join('<br>')+'</div></li>'});h+='</ol></section>'}
+ if(it.closing&&it.closing.length){var lines=it.closing.slice(),last=lines.pop();
+  h+='<div class="kh-foot aged-close">';
+  if(lines.length)h+='<p class="aged-close-s">'+lines.map(function(l){return esc(l)}).join('<br>')+'</p>';
+  if(last)h+='<p class="aged-close-b">'+khEm(last,it.closingEm)+'</p>';h+='</div>'}
+ if(it.buyUrl)h+='<a class="buy aged-buy" href="'+esc(it.buyUrl)+'" target="_blank" rel="noopener noreferrer">'+esc(it.buyLabel||'구매하기')+'</a>';
+ return h}
+function khReady(x){return (x.sections&&x.sections.length)||(x.body&&x.body.length)||!!x.tool}
+function khEm(s,em){var t=esc(s||'');if(!em)return t;var e=esc(em);return t.split(e).join('<b>'+e+'</b>')}
+function khSections(it){var h='';
+ (it.sections||[]).forEach(function(sec,si){
+  h+='<section class="kh-panel kh-panel-'+(si+1)+'"><h2 class="kh-secq"><span class="kh-badge">'+(si+1==1?'①':'②')+'</span><span>'+esc(sec.title)+'</span></h2>';
+  if(sec.highlight){h+='<div class="kh-hl"><p class="kh-hlt">'+sec.highlight.title.map(function(l){return esc(l)}).join('<br>')+'</p>';
+   if(sec.highlight.sub)h+='<p class="kh-hls">'+esc(sec.highlight.sub)+'</p>';h+='</div>'}
+  if(sec.pair){h+='<div class="kh-grid">';sec.pair.forEach(function(c){h+='<div class="card kh-stat"><div class="kh-st">'+esc(c.title)+'</div><div class="kh-sv">'+esc(c.value)+'</div><div class="muted">'+esc(c.sub||'')+'</div></div>'});h+='</div>'}
+  if(sec.tips){h+='<div class="kh-grid">';sec.tips.forEach(function(c){h+='<div class="card kh-stat">'+(c.icon?'<div class="kh-ico">'+esc(c.icon)+'</div>':'')+'<div class="kh-st">'+esc(c.title)+'</div><div class="muted">'+esc(c.sub||'')+'</div></div>'});h+='</div>'}
+  if(sec.note){h+='<div class="kh-note"><div class="kh-nl">'+esc(sec.note.label||'참고')+'</div><p>'+khEm(sec.note.text,sec.note.em)+'</p></div>'}
+  if(sec.guides){sec.guides.forEach(function(c){h+='<div class="card kh-guide"><div class="muted kh-gk">'+esc(c.kicker)+'</div><b class="kh-gt">'+esc(c.title)+'</b>'+(c.text?'<p class="desc">'+c.text.split('\n').map(function(l){return esc(l)}).join('<br>')+'</p>':'');
+   if(c.footer)h+='<p class="kh-gf">'+c.footer.split('\n').map(function(l){return esc(l)}).join('<br>')+'</p>';h+='</div>'})}
+  h+='</section>'});
+ if(it.footer)h+='<p class="kh-foot">'+it.footer.split('\n').map(function(l){return khEm(l,it.footerEm)}).join('<br>')+'</p>';
+ return h}
+function knowhow(id){var K=window.KNOWHOW||[];if(id){var it=K.filter(function(x){return x.id==id})[0];if(!it){location.hash='#/know-how';return}
+  if(it.tool==='grind'){grindView();return}
+  var h=top(it.title,it.back)+'<div class="pad">';
+  if(it.layout==='aged')h+=khAged(it);
+  else if(it.sections&&it.sections.length)h+=khSections(it);
+  else if(it.body&&it.body.length)h+='<p class="q">'+esc(it.icon||'')+' '+esc(it.title)+'</p>'+it.body.map(function(p){return '<p class="desc">'+esc(p)+'</p>'}).join('');
+  else h+='<p class="q">'+esc(it.icon||'')+' '+esc(it.title)+'</p>'+(it.id==='grind'?'<button type="button" class="bigbtn primary g-measure-enter" onclick="location.hash=\'#/know-how/grind-measure\'">내 분쇄도 측정하기<small>사진으로 분쇄 입자 크기를 가늠해요</small></button>':'')+'<div class="card empty"><div class="ico">📝</div><b>내용 준비 중</b><p>곧 커스텀커피의 노하우를 알려드릴게요.</p></div>';
+  if(it.cta&&it.cta.href)h+='<button type="button" class="bigbtn primary aged-cta" onclick="location.hash=\''+esc(it.cta.href)+'\'">'+esc(it.cta.title)+'<small>'+esc(it.cta.desc||'')+'</small></button>';
+  app.innerHTML=h+'</div>';return}
+ var h=top('커피 노하우')+'<div class="pad"><p class="q">커피 노하우</p><p class="qsub">알고 싶은 주제를 골라주세요</p>';
+ K.forEach(function(x){if(x.id==='grind-measure'||x.hidden)return;var sub=x.desc?('<span>'+esc(x.desc)+'</span>'):(khReady(x)?'':'<span>준비 중</span>');h+='<button class="opt" onclick="location.hash=\'#/know-how/'+x.id+'\'"><span class="num">'+esc(x.icon||'•')+'</span><div><b>'+esc(x.title)+'</b>'+sub+'</div></button>'});app.innerHTML=h+'</div>'}
+function isGrindToolPath(p){return p[0]=='grind'||p[0]=='grind-measure'||(p[0]=='know-how'&&p[1]=='grind-measure')}
+function appBack(fallback){if(st.canBack)history.back();else location.hash=(fallback==null||fallback==='')?'#/':fallback}
+window.appBack=appBack;
+function route(){st.reRecipe=null;stopTimer();closeSheet();app.classList.remove('hasbar');app.removeAttribute('data-char');
+ if(!st.booted){st.booted=true;var raw=location.hash,first=raw.replace(/^#\/?/,'').split('/');
+  if(isGrindToolPath(first)){history.replaceState({gApp:1},'',location.pathname+location.search+'#/');history.pushState({gApp:1},'',location.pathname+location.search+raw);st.canBack=true}
+  else{try{history.replaceState({gApp:1},'',location.pathname+location.search+raw)}catch(e){}st.canBack=false}
+ }else st.canBack=true;
+ var p=location.hash.replace(/^#\/?/,'').split('/');window.scrollTo(0,0);
+ if(p[0]=='quiz')quiz(+p[1]||1);else if(p[0]=='result')result();else if(p[0]=='recipes'){if(p[1])recipesList(p[1],p[2]);else recipesHome()}else if(p[0]=='recipe')recipeView(decodeURIComponent(p[1]),p[2]);else if(p[0]=='catrecipe')catRecipeView(p[1],p[2]);else if(p[0]=='know-how')knowhow(p[1]);else if(p[0]=='grind'||p[0]=='grind-measure')grindView();else if(p[0]=='list')list(st.filter);
+ else if(p[0]=='bean'){if(st.last!=p[1])st.ri=0;st.last=p[1];detail(decodeURIComponent(p[1]),p[2])}else home()}
+if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').catch(function(){})}
+window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();deferredPrompt=e});
+window.addEventListener('appinstalled',function(){deferredPrompt=null;hideInstallBtn()});
+window.addEventListener('hashchange',route);route();
+window.__recommend=recommend;window.__LOWMAP=LOWMAP;window.__HIGHMAP=HIGHMAP;window.__MIDMAP=MIDMAP;
+})();
